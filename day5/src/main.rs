@@ -77,7 +77,7 @@ fn read_input_file(filename : &str) -> Vec<GridLine> {
     let reader = BufReader::new(file);
     let mut gridlines : Vec<GridLine> = Vec::new();
     for line in reader.lines() {
-        gridlines.push(GridLine::from_str(line.unwrap().trim()).unwrap());
+        gridlines.push(line.unwrap().trim().parse().unwrap());
     }
     gridlines
 }
