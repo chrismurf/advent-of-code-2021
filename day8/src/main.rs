@@ -12,10 +12,6 @@ fn segments_to_bits(segments: &str) -> u8 {
     return bitmask
 }
 
-fn count_bits(mask: u8) -> u32 {
-    (0..8u8).map(|i| ((mask & (1u8 << i)) != 0) as u32).sum()
-}
-
 type SegmentMask = u8;
 type Digit = u8;
 
@@ -62,7 +58,7 @@ impl DisplayObservation {
     fn compute_mapping(&mut self) {
         // Start by finding 1/4/7/8, which have unique segment counts
         for mask in self.input_masks.clone() {
-            match count_bits(mask) {
+            match mask.count_ones() {
                 2 => { self.set_mapping(1, mask); },
                 4 => { self.set_mapping(4, mask); },    
                 3 => { self.set_mapping(7, mask); },
@@ -75,7 +71,7 @@ impl DisplayObservation {
 
         // Now use 1,4,7,8 to derive the rest
         for mask in self.input_masks.clone() {
-            match count_bits(mask) {
+            match mask.count_ones() {
                 5 => {
                     // 2,3,5 all have five segments
                     if mask & self.segments[&1] == self.segments[&1] {
