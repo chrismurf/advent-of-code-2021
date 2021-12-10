@@ -41,7 +41,7 @@ fn compute_scores(lines: Vec<String>) -> (u64, Vec<u64>) {
             },
             Ok(stack) => { Some(stack) },
         }
-    // Then for each incomplete line, compute per-row completness score
+    // Then for each incomplete line, compute per-row completeness score
     ).map(|expected| {
         let mut score = 0u64;
         for c in expected.chars().rev() {
