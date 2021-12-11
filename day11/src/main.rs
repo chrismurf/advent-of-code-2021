@@ -49,19 +49,19 @@ impl OctopusGarden {
     fn flash_energetic_octopi(&mut self) -> u32 {
         let mut flash_count: u32 = 0;
         loop {
-            let mut anybody_flashed = false;
+            let mut nobody_flashed = true;
             for ri in 0..self.octopi.len() {
                 for ci in 0..self.octopi[0].len() {
                     if self.octopi[ri][ci].should_flash() {
                         self.octopi[ri][ci] = Octopus::Flashed();
-                        anybody_flashed = true;
+                        nobody_flashed = false;
                         flash_count += 1;
                         self.increment_neighbors(ri as i32, ci as i32);
                     }
                 }
             }
 
-            if !anybody_flashed {
+            if nobody_flashed {
                 break;
             }
         }
