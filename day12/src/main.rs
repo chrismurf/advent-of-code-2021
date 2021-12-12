@@ -1,26 +1,29 @@
-use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 
+type NodeId = u16;
+
 #[derive(Debug)]
 struct Node {
-    id: u32,
-    _name: String,
+    name: String,
     revisitable: bool,
 }
 
 #[derive(Debug)]
 struct Graph {
-    // IndexMap will let us look up by string *or* index
-    nodes: IndexMap<String, Node>,
-    edges: HashMap<u32, HashSet<u32>>,
+    start: Option<NodeId>,
+    end: Option<NodeId>,
+    nodes: Vec<Node>,
+    edges: HashMap<NodeId, HashSet<NodeId>>,
 }
 
 impl Graph {
     fn new() -> Self {
         Graph {
-            nodes: IndexMap::new(),
+            start: None,
+            end: None,
+            nodes: Vec::new(),
             edges: HashMap::new(),
         }
     }
@@ -31,21 +34,32 @@ impl Graph {
         let mut graph: Graph = Graph::new();
         for line in reader.lines() {
             let names: Vec<String> = line.unwrap().split("-").map(|x| x.to_owned()).collect();
-            graph.add_edge(names.get(0).unwrap(), names.get(1).unwrap());
+            graph.add_edge(
+                names.get(0).unwrap(),
+                names.get(1).unwrap()
+            );
         }
         graph
     }
 
-    fn ensure_node_exists(&mut self, name: &str) -> u32 {
-        let entry = self.nodes.entry(name.to_string());
-        let new_id: u32 = entry.index() as u32;
-        let node: &mut Node = entry.or_insert(Node {
-            id: 0,
-            _name: name.to_string(),
-            revisitable: name.to_ascii_uppercase() == name,
-        });
-        node.id = new_id;
-        node.id
+    fn ensure_node_exists(&mut self, name: &str) -> NodeId {
+        let node_id: NodeId;
+        match self.nodes.iter().position(|n| n.name == name) {
+            Some(position) => {
+                return position as NodeId;
+            },
+
+            None => {
+                node_id = self.nodes.len() as NodeId;
+                self.nodes.push(Node {
+                    name: name.to_owned(),
+                    revisitable: name.to_ascii_uppercase() == name
+                });
+                if name == "start" { self.start = Some(node_id)};
+                if name == "end" { self.end = Some(node_id)};
+                return node_id;
+            }
+        }
     }
 
     fn add_edge(&mut self, a: &str, b: &str) {
@@ -63,10 +77,10 @@ impl Graph {
 
     fn generate_paths_via(
         &self,
-        prefix: Vec<u32>,
-        destination: u32,
+        prefix: Vec<NodeId>,
+        destination: NodeId,
         allow_revisit: bool,
-    ) -> Vec<Vec<u32>> {
+    ) -> Vec<Vec<NodeId>> {
         let mut paths = Vec::new();
 
         if let Some(edges) = self.edges.get(prefix.last().unwrap()) {
@@ -79,7 +93,7 @@ impl Graph {
                     paths.push(new_prefix);
                     continue;
                 }
-                let (_, next_node) = self.nodes.get_index(next_id as usize).unwrap();
+                let next_node = self.nodes.get(next_id as usize).unwrap();
                 if next_node.revisitable || !prefix.contains(&next_id) {
                     // Option 2 - next_id is for a revisitable or unvisited node
                     paths.extend(self.generate_paths_via(new_prefix, destination, allow_revisit));
@@ -97,14 +111,14 @@ impl Graph {
         paths
     }
 
-    fn count_paths(&self, allow_revisit: bool) -> u32 {
-        let initial_path: Vec<u32> = vec![self.nodes.get("start").unwrap().id];
+    fn count_paths(&self, allow_revisit: bool) -> usize {
+        let initial_path: Vec<NodeId> = vec![self.start.unwrap()];
         let paths = self.generate_paths_via(
             initial_path,
-            self.nodes.get("end").unwrap().id,
+            self.end.unwrap(),
             allow_revisit,
         );
-        paths.len() as u32
+        paths.len()
     }
 }
 
