@@ -4,87 +4,104 @@ use std::io::{self, prelude::*, BufReader};
 
 #[derive(Debug)]
 pub struct PolymerInstructions {
-    template: String,
-    rules: HashMap<(u8, u8), u8>
+    // Histogram of current pairs of bytes in the string
+    histogram: HashMap<(u8, u8), u64>,
+    rules: HashMap<(u8, u8), [(u8, u8); 2]>,
+    final_byte: u8,
+}
+
+// Given a string reference, returns a HashMap containing the count of 
+// each byte pair found in the string, and the final byte.
+fn pair_histogram(string: &str) -> HashMap<(u8, u8), u64> {
+    let string = string.trim().to_owned();
+    let mut histogram: HashMap<(u8, u8), u64> = HashMap::new();
+    // convert template string to pair entries in histogram, and final_byte
+    let left = string.bytes();
+    let mut right = string.bytes();
+    right.next();
+    for pair in left.zip(right) {
+        *histogram.entry(pair).or_insert(0) += 1;
+    }
+    histogram
 }
 
 impl PolymerInstructions {
-    fn new_with_template(template: String) -> Self {
-        PolymerInstructions {template, rules: HashMap::new()}
-    }
-
     fn from_file(path: &str) -> Self {
         let file = File::open(path).unwrap();
         let reader = BufReader::new(file);
-        let mut iter = reader.lines();
-        let template = iter.next().unwrap().unwrap().trim().to_owned();
-        let mut instructions = PolymerInstructions::new_with_template(template);
-        iter.next(); // Skip empty line
+        let mut lines = reader.lines();
 
-        for line_res in iter {
+        // Get histogram of pairs in initial template, and final template byte
+        let template = lines.next().unwrap().unwrap();
+        let histogram = pair_histogram(&template);
+        let final_byte = template.bytes().last().unwrap();
+        
+        // skip empty line
+        lines.next();
+
+        // parse rules
+        let mut rules: HashMap<(u8, u8), [(u8, u8); 2]> = HashMap::new();
+        for line_res in lines {
             let line = line_res.unwrap();
-            let mut bytes = line.bytes();
-            // split AA -> B\n into (A, A) and B
-            instructions.rules.insert(
-                (bytes.nth(0).unwrap(), bytes.nth(0).unwrap()), 
-                bytes.nth(4).unwrap()
-            );
+            let mut bytes = line.trim().bytes();
+            // convert AC -> B\n into (A, C) -> (A, B), (B, C)
+            let a = bytes.nth(0).unwrap();
+            let c = bytes.nth(0).unwrap();
+            let b = bytes.nth(4).unwrap();
+            
+            rules.insert((a,c), [(a, b), (b, c)]);
 
         }
-        instructions
+        PolymerInstructions { histogram, rules, final_byte }
     }
 
-    fn process_string(&self, s: &str) -> String {
-        let mut new_bytes: Vec<u8> = Vec::new();
-        let mut iter = s.bytes().peekable();
-        loop {
-            let a = iter.next().unwrap();
-            match iter.peek() {
-                Some(&b) => {
-                    new_bytes.push(a);
-                    new_bytes.push(self.rules[&(a,b)]);
-                },
-                None => {
-                    new_bytes.push(a);
-                    return String::from_utf8(new_bytes).unwrap();
-                }
-            }
+    /// Step the current histogram forward once, based on the rules
+    fn step(&mut self) {
+        let mut new_histogram = HashMap::new();
+
+        for (pair, &count) in self.histogram.iter() {
+            let new_pairs = self.rules[pair];
+            *new_histogram.entry(new_pairs[0]).or_insert(0) += count;
+            *new_histogram.entry(new_pairs[1]).or_insert(0) += count;
         }
+        self.histogram = new_histogram;
+    }
+
+    /// Get the current distribution of bytes
+    pub fn byte_histogram(&self) -> HashMap<u8, u64> {
+        let mut hist = HashMap::new();
+        hist.insert(self.final_byte, 1);
+
+        for ((byte, _), count) in self.histogram.iter() {
+            *hist.entry(*byte).or_insert(0) += count;
+        }
+        hist
     }
 }
 
 fn main() -> io::Result<()> {
-    let instructions = PolymerInstructions::from_file("input.txt");
+    let mut instructions = PolymerInstructions::from_file("input.txt");
+    for _ in 0..10 { instructions.step(); }
 
-    let mut s = instructions.template.clone();
-    for _ in 0..10 {
-        s = instructions.process_string(&s);
-    }
+    let histogram = instructions.byte_histogram();
+    let (&max_char, max_qty) = histogram.iter()
+        .max_by(|a, b| a.1.cmp(&b.1)).unwrap();
+    let (&min_char, min_qty) = histogram.iter()
+        .min_by(|a, b| a.1.cmp(&b.1)).unwrap();
 
-    let mut histogram: HashMap<u8,u32> = HashMap::new();
+    println!("After 10 steps, max char is {} and min is {}. Difference in quantity is {}.",
+        max_char as char, min_char as char, max_qty - min_qty);
 
-    for b in s.bytes() {
-        *histogram.entry(b).or_insert(0) += 1;
-    }
+    for _ in 0..30 { instructions.step(); }
 
-    let (max_char, max_qty) = histogram.iter().max_by(|a, b| a.1.cmp(&b.1)).unwrap();
-    let (min_char, min_qty) = histogram.iter().min_by(|a, b| a.1.cmp(&b.1)).unwrap();
+    let histogram = instructions.byte_histogram();
+    let (&max_char, max_qty) = histogram.iter()
+        .max_by(|a, b| a.1.cmp(&b.1)).unwrap();
+    let (&min_char, min_qty) = histogram.iter()
+        .min_by(|a, b| a.1.cmp(&b.1)).unwrap();
 
-    println!("{}", max_qty - min_qty);
+        println!("After 40 steps, max char is {} and min is {}. Difference in quantity is {}.",
+        max_char as char, min_char as char, max_qty - min_qty);
 
     Ok(())
-}
-
-#[test]
-fn test_example() {
-    let instructions = PolymerInstructions::from_file("input_example.txt");
-    let mut s = instructions.template.clone();
-    s = instructions.process_string(&s);
-    assert_eq!(s, "NCNBCHB");
-    s = instructions.process_string(&s);
-    assert_eq!(s, "NBCCNBBBCBHCB");
-    s = instructions.process_string(&s);
-    assert_eq!(s, "NBBBCNCCNBBNBNBBCHBHHBCHB");
-    s = instructions.process_string(&s);
-    assert_eq!(s, "NBBNBNBBCCNBCNCCNBBNBBNBBBNBBNBBCBHCBHHNHCBBCBHCB");
 }
