@@ -9,7 +9,7 @@ struct Point { x: usize, y: usize }
 #[derive(Debug, PartialEq, Clone, Copy)]
 struct Path {
     previous: Option<Point>,
-    risk: Option<u32>
+    risk: Option<u64>
 }
 
 impl Path {
@@ -40,6 +40,24 @@ impl CavernMap {
         CavernMap { map, width, height }
     }
 
+    fn tile_5x5_with_increments(&self) -> Self {
+        let mut map: Vec<Vec<u8>> = Vec::new();
+        for tile_row in 0..5 { 
+            for row in self.map.iter() {
+                let mut new_row: Vec::<u8> = Vec::new();
+                for tile_col in 0..5 { 
+                    for value in row.iter() {
+                        let mut new_value = value + tile_col + tile_row;
+                        while new_value > 9 { new_value -= 9; }
+                        new_row.push(new_value);
+                    }
+                }
+                map.push(new_row);
+            }
+        }
+        CavernMap { map, width: 5*self.width, height: 5*self.height }
+    }
+
     fn get_neighbors(&self, p: &Point) -> Vec<Point> {
         let mut neighbors = Vec::new();
         if p.x > 0 { neighbors.push( Point { x: p.x-1, y: p.y } ); }
@@ -49,7 +67,7 @@ impl CavernMap {
         neighbors
     }
 
-    fn safest_path(&self) -> (Vec<Point>, u32) {
+    fn safest_path(&self) -> (Vec<Point>, u64) {
         // Implement Djikstra's algorithm.  For each point, we keep track of 
         // the best previous step to get there, and the cost it took.  We then
         // iterate through every element (in order of current cost) et voila.
@@ -70,12 +88,12 @@ impl CavernMap {
             // Find current lowest risk path.  This should be done with a Priority Queue,
             // but I'm being lazy and just iterating through the whole set each time.
             let mut point: Point = Point { x: 255, y: 255 };
-            let mut lowest_cost = u32::MAX;
+            let mut lowest_cost = u64::MAX;
             for unvis_point in &unvisited {
                 let path = &safest_paths[unvis_point.y][unvis_point.x];
-                if path.risk.unwrap_or(u32::MAX) < lowest_cost {
+                if path.risk.unwrap_or(u64::MAX) < lowest_cost {
                     point = *unvis_point;
-                    lowest_cost = path.risk.unwrap_or(u32::MAX);
+                    lowest_cost = path.risk.unwrap_or(u64::MAX);
                 }
             }
             unvisited.remove(&point);
@@ -86,8 +104,8 @@ impl CavernMap {
             for nbr in self.get_neighbors(&point) {
                 let nbr_risk = self.map[nbr.y][nbr.x];
                 let path_to_nbr = &safest_paths[nbr.y][nbr.x];
-                let new_nbr_risk = path_to_point.risk.unwrap() + nbr_risk as u32;
-                let current_nbr_risk = path_to_nbr.risk.unwrap_or(u32::MAX);
+                let new_nbr_risk = path_to_point.risk.unwrap() + nbr_risk as u64;
+                let current_nbr_risk = path_to_nbr.risk.unwrap_or(u64::MAX);
                 if new_nbr_risk < current_nbr_risk {
                     safest_paths[nbr.y][nbr.x].previous = Some(point);
                     safest_paths[nbr.y][nbr.x].risk = Some(new_nbr_risk);
@@ -104,9 +122,14 @@ impl CavernMap {
 }
 
 fn main() -> io::Result<()> {
-    let mut cavern_map = CavernMap::from_file("input.txt");
-    let (safest_path, cost) = cavern_map.safest_path();
+    let cavern_map = CavernMap::from_file("input.txt");
+    let (_safest_path, cost) = cavern_map.safest_path();
     println!("Safest path has cost {}", cost);
-    
+
+    let cavern_map_5x5 = cavern_map.tile_5x5_with_increments();
+    let (_safest_path, cost) = cavern_map_5x5.safest_path();
+    println!("5x5 Safest path has cost {}", cost);
+
+
     Ok(())
 }
