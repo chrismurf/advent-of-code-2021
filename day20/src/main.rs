@@ -4,10 +4,11 @@ use std::io::{prelude::*, BufReader};
 type Window3x3 = [[bool; 3]; 3];
 
 struct FilterableImage {
-    filter: Vec<bool>,
+    mapping: Vec<bool>,
     image : Vec<Vec<bool>>,
     width: usize,
-    height: usize
+    height: usize,
+    background: bool
 }
 
 impl FilterableImage {
@@ -16,8 +17,8 @@ impl FilterableImage {
             .unwrap_or_else(|_| panic!("File 'input.txt' not readable.") );
         let reader = BufReader::new(file);
         let mut lines = reader.lines();
-        // Read filter
-        let filter = lines.next()
+        // Read filter mapping
+        let mapping = lines.next()
             .unwrap_or_else(|| panic!("Empty file!"))
             .unwrap_or_else(|err| panic!("IO Error with input.txt: {}", err))
             .trim()
@@ -46,12 +47,12 @@ impl FilterableImage {
         let height = image.len();
         let width = if image.len() > 0 { image[0].len() } else { 0 };
         
-        FilterableImage {filter, image, width, height}
+        FilterableImage {mapping, image, width, height, background: false}
     }
 
-    fn pixel(&self, x: isize, y: isize) -> bool {
+    fn get(&self, x: isize, y: isize) -> bool {
         if x < 0 || x >= self.width as isize || y < 0 || y >= self.height as isize {
-            false
+            self.background
         } else {
             self.image[y as usize][x as usize]
         }
@@ -59,20 +60,22 @@ impl FilterableImage {
 
     fn get_3x3(&self, x: isize, y: isize) -> Window3x3 {
         [
-            [self.pixel(x-1, y-1), self.pixel(x, y-1), self.pixel(x+1, y-1)],
-            [self.pixel(x-1, y), self.pixel(x, y), self.pixel(x+1, y)],
-            [self.pixel(x-1, y+1), self.pixel(x, y+1), self.pixel(x+1, y+1)],
+            [self.get(x-1, y-1), self.get(x, y-1), self.get(x+1, y-1)],
+            [self.get(x-1, y), self.get(x, y), self.get(x+1, y)],
+            [self.get(x-1, y+1), self.get(x, y+1), self.get(x+1, y+1)],
         ]
     }
 
-    fn filter_3x3(&self, data: &Window3x3) -> bool {
-        let index = data.iter()
+    fn get_filtered_3x3(&self, x: isize, y: isize) -> bool {
+        let data = self.get_3x3(x, y);
+
+        let filter_index = data.iter()
             .flatten()
             .enumerate()
             .fold(0usize, |acc, (i, el) | {
                 acc + ((*el as usize) << (8-i))
             });
-        self.filter[index]
+        self.mapping[filter_index]
     }
 
     fn filter(&self) -> Self {
@@ -80,23 +83,26 @@ impl FilterableImage {
         for y in -1..=self.height as isize {
             let mut row: Vec<bool> = Vec::with_capacity(self.width+2);
             for x in -1..=self.width as isize {
-                row.push(self.filter_3x3(&self.get_3x3(x, y)));
+                row.push(self.get_filtered_3x3(x, y));
             }
             filtered.push(row);
         }
 
+        let background = if self.background { self.mapping[511] } else { self.mapping[0] };
+
         FilterableImage {
-            filter: self.filter.clone(),
+            mapping: self.mapping.clone(),
             image: filtered,
             width: self.width + 2,
-            height: self.height + 2
+            height: self.height + 2,
+            background
         }
     }
 
     fn draw(&self) {
         for y in 0..self.height as isize {
             for x in 0..self.width as isize {
-                print!("{}", if self.pixel(x, y) { "█" } else { " " });
+                print!("{}", if self.get(x, y) { "█" } else { " " });
             }
             println!();
         }
@@ -112,23 +118,24 @@ impl FilterableImage {
 }
 
 fn main() {
-    let image = FilterableImage::from_file("input.txt");
-    let filtered = image.filter();
-    let filtered2 = filtered.filter();
-    println!("{}", filtered2.count_lit());
+    let mut lit_after_two: usize = 0;
+    let mut image = FilterableImage::from_file("input.txt");
+    for i in 0..50 {
+        if i == 2 { lit_after_two = image.count_lit(); }
+        println!("");
+        image.draw();
+        image = image.filter();
+    }
+    println!("");
+    image.draw();
+
+    println!("After two: {}, after 50: {}", lit_after_two, image.count_lit());
 }
 
 #[test]
 fn test() {
     let image = FilterableImage::from_file("input_example.txt");
-    println!();
-    image.draw();
-    println!();
     let filtered = image.filter();
-    filtered.draw();
-    println!();
     let filtered = filtered.filter();
-    filtered.draw();
-    println!();
     assert_eq!(filtered.count_lit(), 35);
 }
